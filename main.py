@@ -1,30 +1,24 @@
 import datetime
+import json
 import os
 import requests
+import os.path
+import CONFIG as CFG
 
-HOST = "example.com"  # DOMAIN OR IP
-TG_TOKEN = "1112223334:AABBCCDDZy7uogv5XhjLLXL1HHJEVAA1212"  # TELEGRAM TOKEN
-TG_CHAT_ID = "123456562"  # YOUR CHAT ID WITH BOT
-
-# IF YOU WANT THEN YOU CAN CHANGE TG MESSAGE
-# VAR datetime IT IS CURENT DATE TIME IN VIEW "HH:MM:SS | YYYY.MM.DD"
-# VAR host IT IS HOST VARIABLE
-
-MESSAGE: str = """
-❌❌❌❌❌❌❌❌❌❌❌❌
-❌  MASTER PROBLEM  ❌
-❌❌❌❌❌❌❌❌❌❌❌❌
-TIME: {datetime}
-HOST: ZABBIX MASTER SERVER - {host}
-TRIGGER: ICMP: Unavailable by ICMP
-LEVEL: DISASTER
-"""
-
+# READ LAST STATES
+STATES = None
+with open(file="states.json", mode="r") as file:
+    STATES = json.loads(file.read())
+# ----------|----------|----------
 
 def sendMsg(message: str):
-    requests.get(
-        f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage?chat_id={TG_CHAT_ID}&text={message}")
-
+    response = requests.get(
+        f"https://api.telegram.org/bot{CFG.TG_TOKEN}/sendMessage?chat_id={CFG.TG_CHAT_ID}&text={message}")
+    if response.status_code == 200:
+        print("Message has been send")
+    else:
+        print("When you send an error has occurred")
+        print(f'{str(response.status_code)} - {json.loads(response.text)["description"]}' )
 
 def ping(address: str) -> bool:
     response = os.system(f"ping -c 4 {address}")
@@ -35,9 +29,27 @@ def ping(address: str) -> bool:
 
 
 def main():
-    if ping(HOST) is False:
-        sendMsg(MESSAGE.format(datetime=datetime.datetime.now().strftime("%H:%M:%S | %Y.%m.%d"),
-                               host=HOST))
+
+    result = ping(CFG.HOST)
+
+    # IF HOST IS UNAVALIABLE
+    if result is False and STATES["last_check"] is True:
+        STATES["last_check"] = False
+        sendMsg(CFG.PROBLEM_MESSAGE.format(datetime=datetime.datetime.now().strftime("%H:%M:%S | %Y.%m.%d"),
+                                       host=CFG.HOST))
+    # ----------|----------|----------
+
+    # IF PROBLEM OF HOST HAS BEEN RESOLVED
+    if result is True and STATES["last_check"] is False:
+        STATES["last_check"] = True
+        sendMsg(CFG.RESOLVE_MESSAGE.format(datetime=datetime.datetime.now().strftime("%H:%M:%S | %Y.%m.%d"),
+                                       host=CFG.HOST))
+    # ----------|----------|----------
+    
+    # WRITE LAST STATES
+    with open(file="states.json", mode="w") as file:
+            file.write(json.dumps(STATES))
+    # ----------|----------|----------
 
 
 if __name__ == '__main__':
